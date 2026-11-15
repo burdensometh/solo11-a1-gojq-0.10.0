@@ -3,7 +3,6 @@ package gojq
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"regexp"
 	"sort"
@@ -17,6 +16,7 @@ type compiler struct {
 	environLoader func() []string
 	variables     []string
 	inputIter     Iter
+	allowInput    bool
 	codes         []*code
 	codeinfos     []codeinfo
 	codeoffset    int
@@ -30,6 +30,7 @@ type Code struct {
 	variables []string
 	codes     []*code
 	codeinfos []codeinfo
+	inputIter Iter
 }
 
 // Run runs the code with the variable values (which should be in the
@@ -41,6 +42,27 @@ func (c *Code) Run(v interface{}, values ...interface{}) Iter {
 
 // RunWithContext runs the code with context.
 func (c *Code) RunWithContext(ctx context.Context, v interface{}, values ...interface{}) Iter {
+	return c.run(ctx, v, values, nil)
+}
+
+// RunWithOptions runs the code with the run options. The variable values
+// should be in the same order as the given variables using WithVariables.
+// Use WithRunInputIter to bind an input iterator to this run only, so that
+// other runs reusing the same compiled Code keep their own input cursor.
+func (c *Code) RunWithOptions(v interface{}, values []interface{}, options ...RunOption) Iter {
+	return c.run(nil, v, values, options)
+}
+
+// RunWithContextAndOptions runs the code with context and the run options.
+func (c *Code) RunWithContextAndOptions(
+	ctx context.Context, v interface{}, values []interface{}, options ...RunOption,
+) Iter {
+	return c.run(ctx, v, values, options)
+}
+
+func (c *Code) run(
+	ctx context.Context, v interface{}, values []interface{}, options []RunOption,
+) Iter {
 	if len(values) > len(c.variables) {
 		return unitIterator(errTooManyVariableValues)
 	} else if len(values) < len(c.variables) {
@@ -49,7 +71,13 @@ func (c *Code) RunWithContext(ctx context.Context, v interface{}, values ...inte
 	for i, v := range values {
 		values[i] = normalizeNumbers(v)
 	}
-	return newEnv(ctx).execute(c, normalizeNumbers(v), values...)
+	opts := &runOptions{inputIter: c.inputIter}
+	for _, option := range options {
+		option(opts)
+	}
+	env := newEnv(ctx)
+	env.inputIter = opts.inputIter
+	return env.execute(c, normalizeNumbers(v), values...)
 }
 
 // ModuleLoader is an interface for loading modules.
@@ -139,6 +167,7 @@ func (c *compiler) compile(q *Query) (*Code, error) {
 		variables: c.variables,
 		codes:     c.codes,
 		codeinfos: c.codeinfos,
+		inputIter: c.inputIter,
 	}, nil
 }
 
@@ -196,7 +225,8 @@ func (c *compiler) compileImport(i *Import) error {
 
 func (c *compiler) compileModule(m *Module, alias string) error {
 	cc := &compiler{
-		moduleLoader: c.moduleLoader, environLoader: c.environLoader, variables: c.variables, inputIter: c.inputIter,
+		moduleLoader: c.moduleLoader, environLoader: c.environLoader, variables: c.variables,
+		inputIter: c.inputIter, allowInput: c.allowInput,
 		codeoffset: c.pc(), scopes: c.scopes, scopecnt: c.scopecnt}
 	defer cc.newScopeDepth()()
 	bs, err := cc.compileModuleInternal(m)
@@ -282,7 +312,8 @@ func (c *compiler) compileFuncDef(e *FuncDef, builtin bool) error {
 	pc, argsorder := c.pc(), getArgsOrder(e.Args)
 	c.funcs = append(c.funcs, &funcinfo{e.Name, pc, e.Args, argsorder})
 	cc := &compiler{
-		moduleLoader: c.moduleLoader, environLoader: c.environLoader, inputIter: c.inputIter,
+		moduleLoader: c.moduleLoader, environLoader: c.environLoader,
+		inputIter: c.inputIter, allowInput: c.allowInput,
 		codeoffset: pc, scopecnt: c.scopecnt, funcs: c.funcs}
 	scope := cc.newScope()
 	cc.scopes = append(c.scopes, scope)
@@ -954,11 +985,14 @@ func (c *compiler) compileFunc(e *Func) error {
 			c.append(&code{op: opdebug, v: "STDERR:"})
 			return nil
 		case "input":
-			if c.inputIter == nil {
+			if !c.allowInput {
 				return &inputNotAllowedError{}
 			}
+			// The callback is nil: the input iterator is bound to the
+			// environment of each run and resolved at execution time
+			// (ref: env.input in execute.go).
 			return c.compileCallInternal(
-				[3]interface{}{c.funcInput, 0, e.Name},
+				[3]interface{}{nil, 0, e.Name},
 				e.Args,
 				nil,
 				false,
@@ -975,14 +1009,6 @@ func (c *compiler) compileFunc(e *Func) error {
 		}
 	}
 	return &funcNotFoundError{e}
-}
-
-func (c *compiler) funcInput(interface{}, []interface{}) interface{} {
-	v, ok := c.inputIter.Next()
-	if !ok {
-		return errors.New("break")
-	}
-	return normalizeNumbers(v)
 }
 
 func (c *compiler) funcModulemeta(v interface{}, _ []interface{}) interface{} {

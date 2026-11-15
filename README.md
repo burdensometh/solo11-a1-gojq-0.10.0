@@ -105,6 +105,7 @@ func main() {
 - [`gojq.WithModuleLoader`](https://pkg.go.dev/github.com/itchyny/gojq?tab=doc#WithModuleLoader) allows to load modules. By default, the module feature is disabled.
 - [`gojq.WithEnvironLoader`](https://pkg.go.dev/github.com/itchyny/gojq?tab=doc#WithEnvironLoader) allows to configure the environment variables referenced by `env` and `$ENV`. By default, OS environment variables are not accessible due to security reason. You can use `gojq.WithEnvironLoader(os.Environ)` if you want.
 - [`gojq.WithVariables`](https://pkg.go.dev/github.com/itchyny/gojq?tab=doc#WithVariables) allows to configure the variables which can be used in the query. Pass the values of the variables to [`code.Run`](https://pkg.go.dev/github.com/itchyny/gojq?tab=doc#Code.Run) in the same order.
+- [`gojq.WithInputIter`](https://pkg.go.dev/github.com/itchyny/gojq?tab=doc#WithInputIter) allows to use `input` and `inputs` functions. The iterator is the default for every run of the compiled code. When reusing the same `*Code` across several input batches, bind an iterator to each run with the run option [`gojq.WithRunInputIter`](https://pkg.go.dev/github.com/itchyny/gojq?tab=doc#WithRunInputIter) (via `code.RunWithOptions`) so that every run advances only its own cursor.
 
 ## Bug Tracker
 Report bug at [Issues・itchyny/gojq - GitHub](https://github.com/itchyny/gojq/issues).

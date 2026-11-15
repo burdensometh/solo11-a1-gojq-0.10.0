@@ -139,7 +139,15 @@ loop:
 				for i := 0; i < argcnt; i++ {
 					args[i] = env.pop()
 				}
-				w := v[0].(func(interface{}, []interface{}) interface{})(x, args)
+				var w interface{}
+				if callback, ok := v[0].(func(interface{}, []interface{}) interface{}); ok {
+					w = callback(x, args)
+				} else if v[0] == nil && v[2] == "input" {
+					// The input iterator is bound to each run (ref: env.input).
+					w = env.input()
+				} else {
+					panic(v)
+				}
 				if e, ok := w.(error); ok {
 					err = e
 					break loop

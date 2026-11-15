@@ -266,6 +266,9 @@ func (cli *cli) process(iter inputIter, code *gojq.Code) error {
 			err = &emptyError{er}
 			continue
 		}
+		// The iterator for input(s)/0 is bound to the compiled Code (see
+		// WithInputIter); the library resolves it through the per-run
+		// environment, so every invocation here keeps its own input state.
 		if er := cli.printValues(code.Run(v, cli.argvalues...)); er != nil {
 			cli.printError(er)
 			err = &emptyError{er}

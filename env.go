@@ -1,6 +1,9 @@
 package gojq
 
-import "context"
+import (
+	"context"
+	"errors"
+)
 
 type env struct {
 	pc        int
@@ -15,6 +18,7 @@ type env struct {
 	offset    int
 	expdepth  int
 	ctx       context.Context
+	inputIter Iter
 }
 
 func newEnv(ctx context.Context) *env {
@@ -24,6 +28,20 @@ func newEnv(ctx context.Context) *env {
 		paths:  newStack(),
 		ctx:    ctx,
 	}
+}
+
+// input reads the next value from the input iterator bound to this run.
+// It returns an error "break" when the iterator is exhausted, which the
+// inputs builtin catches to terminate the stream.
+func (env *env) input() interface{} {
+	if env.inputIter == nil {
+		return &inputNotAllowedError{}
+	}
+	v, ok := env.inputIter.Next()
+	if !ok {
+		return errors.New("break")
+	}
+	return normalizeNumbers(v)
 }
 
 type scope struct {
