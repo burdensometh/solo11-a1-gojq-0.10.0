@@ -55,6 +55,7 @@ func init() {
 		"tostring":       argFunc0(funcToString),
 		"type":           argFunc0(funcType),
 		"contains":       argFunc1(funcContains),
+		"contains_multi": argFunc1(funcContainsMulti),
 		"explode":        argFunc0(funcExplode),
 		"implode":        argFunc0(funcImplode),
 		"split":          {argcount1 | argcount2, funcSplit},
@@ -398,6 +399,119 @@ func funcContains(v, x interface{}) interface{} {
 		},
 		func(l, r interface{}) interface{} { return &funcContainsError{l, r} },
 	)
+}
+
+// funcContainsMulti is the multiplicity-aware variant of funcContains.
+//
+// Scalars and object fields keep the original containment relation, but at an
+// array level every element of the right-hand side must match a distinct
+// element of the left-hand side. Nested arrays follow the same rule
+// recursively. When several candidates could match, the matching searches for
+// a complete assignment rather than greedily keeping the first match.
+func funcContainsMulti(v, x interface{}) interface{} {
+	switch v := v.(type) {
+	case nil:
+		if x == nil {
+			return true
+		}
+	case bool:
+		switch x := x.(type) {
+		case bool:
+			if v == x {
+				return true
+			}
+		}
+	}
+	return binopTypeSwitch(v, x,
+		func(l, r int) interface{} { return l == r },
+		func(l, r float64) interface{} { return l == r },
+		func(l, r *big.Int) interface{} { return l.Cmp(r) == 0 },
+		func(l, r string) interface{} { return strings.Contains(l, r) },
+		func(l, r []interface{}) interface{} {
+			return containsMultiArray(l, r)
+		},
+		func(l, r map[string]interface{}) interface{} {
+			for k, rk := range r {
+				lk, ok := l[k]
+				if !ok {
+					return false
+				}
+				c := funcContainsMulti(lk, rk)
+				if _, ok := c.(error); ok {
+					return false
+				}
+				if c == false {
+					return false
+				}
+			}
+			return true
+		},
+		func(l, r interface{}) interface{} { return &funcContainsMultiError{l, r} },
+	)
+}
+
+// containsMultiArray reports whether every element of r can be matched to a
+// distinct element of l under the multiplicity-aware containment relation.
+//
+// It builds a bipartite graph (an edge means the left element contains the
+// right one) and then searches for a matching covering every right element
+// using augmenting paths. Unlike a greedy first-fit, an augmenting path can
+// reroute an earlier assignment, so a complete match is found whenever one
+// exists. Building the graph evaluates every pair once and the matching runs
+// in polynomial time instead of trying every assignment exhaustively.
+func containsMultiArray(l, r []interface{}) bool {
+	// The right-hand side needs at least as many elements as candidates.
+	if len(l) < len(r) {
+		return false
+	}
+	// adj[j] holds the indices of the left elements that contain r[j].
+	adj := make([][]int, len(r))
+	for j, rv := range r {
+		var edges []int
+		for i, lv := range l {
+			c := funcContainsMulti(lv, rv)
+			if _, ok := c.(error); ok {
+				continue
+			}
+			if c == true {
+				edges = append(edges, i)
+			}
+		}
+		if len(edges) == 0 {
+			return false
+		}
+		adj[j] = edges
+	}
+	// matchL[i] is the right element currently matched to left element i,
+	// or -1 when the left element is still free.
+	matchL := make([]int, len(l))
+	for i := range matchL {
+		matchL[i] = -1
+	}
+	seen := make([]bool, len(l))
+	var augment func(j int) bool
+	augment = func(j int) bool {
+		for _, i := range adj[j] {
+			if seen[i] {
+				continue
+			}
+			seen[i] = true
+			if matchL[i] == -1 || augment(matchL[i]) {
+				matchL[i] = j
+				return true
+			}
+		}
+		return false
+	}
+	for j := range r {
+		for i := range seen {
+			seen[i] = false
+		}
+		if !augment(j) {
+			return false
+		}
+	}
+	return true
 }
 
 func funcExplode(v interface{}) interface{} {

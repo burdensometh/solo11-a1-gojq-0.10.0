@@ -110,6 +110,14 @@ func (err *funcContainsError) Error() string {
 	return fmt.Sprintf("cannot check contains(%s): %s", previewValue(err.r), typeErrorPreview(err.l))
 }
 
+type funcContainsMultiError struct {
+	l, r interface{}
+}
+
+func (err *funcContainsMultiError) Error() string {
+	return fmt.Sprintf("cannot check contains_multi(%s): %s", previewValue(err.r), typeErrorPreview(err.l))
+}
+
 type hasKeyTypeError struct {
 	l, r interface{}
 }

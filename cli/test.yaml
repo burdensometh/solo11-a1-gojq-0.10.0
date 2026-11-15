@@ -1134,6 +1134,84 @@
     ["ab\u0000cd","b\u0000cd",true]
     ["ab\u0000cd","b\u0000cd",true]
 
+- name: contains_multi function
+  args:
+    - -c
+    - '.[] as $x | ([],[3,4],[3,1],[1,1],[3,3,3],[[1],[1]],[[1],[1,2]],{"a":[1,1]},{"b":[5]}) as $y | $x | [$x,$y,contains_multi($y)]?'
+  input: '[[],[1,2,3],[1,1,2,3],[[1],[1,2],1],{"a":[1,2,3],"b":[4,5,6]}]'
+  expected: |
+    [[],[],true]
+    [[],[3,4],false]
+    [[],[3,1],false]
+    [[],[1,1],false]
+    [[],[3,3,3],false]
+    [[],[[1],[1]],false]
+    [[],[[1],[1,2]],false]
+    [[1,2,3],[],true]
+    [[1,2,3],[3,4],false]
+    [[1,2,3],[3,1],true]
+    [[1,2,3],[1,1],false]
+    [[1,2,3],[3,3,3],false]
+    [[1,2,3],[[1],[1]],false]
+    [[1,2,3],[[1],[1,2]],false]
+    [[1,1,2,3],[],true]
+    [[1,1,2,3],[3,4],false]
+    [[1,1,2,3],[3,1],true]
+    [[1,1,2,3],[1,1],true]
+    [[1,1,2,3],[3,3,3],false]
+    [[1,1,2,3],[[1],[1]],false]
+    [[1,1,2,3],[[1],[1,2]],false]
+    [[[1],[1,2],1],[],true]
+    [[[1],[1,2],1],[3,4],false]
+    [[[1],[1,2],1],[3,1],false]
+    [[[1],[1,2],1],[1,1],false]
+    [[[1],[1,2],1],[3,3,3],false]
+    [[[1],[1,2],1],[[1],[1]],true]
+    [[[1],[1,2],1],[[1],[1,2]],true]
+    [{"a":[1,2,3],"b":[4,5,6]},{"a":[1,1]},false]
+    [{"a":[1,2,3],"b":[4,5,6]},{"b":[5]},true]
+
+- name: contains_multi function nested arrays need distinct matches
+  args:
+    - -c
+    - '. as $x | [$x, contains_multi([[2],[2]])]'
+  input: '[[[1,2],[3,4]]]'
+  expected: |
+    [[[[1,2],[3,4]]],false]
+
+- name: contains_multi function multiplicity on scalars and strings
+  args:
+    - -c
+    - '. as $x | ["abab" | contains_multi("ab"), "abab" | contains_multi("aba"), [1,2,2,3] | contains_multi([2,2]), [1,2,3] | contains_multi([2,2]), null | contains_multi(null)]'
+  input: 'null'
+  expected: |
+    [true,true,true,false,true]
+
+- name: contains_multi function requires distinct elements
+  args:
+    - -c
+    - '. as $x | [$x, contains_multi([1,1]), contains([1,1])]'
+  input: '[1,2,3]'
+  expected: |
+    [[1,2,3],false,true]
+
+- name: contains_multi function finds a complete match instead of greedy first fit
+  args:
+    - -c
+    - '. as $x | [$x, contains_multi([[1],[1,2]])]'
+  input: '[[1,2],[1]]'
+  expected: |
+    [[[1,2],[1]],true]
+
+- name: contains_multi function error
+  args:
+    - -c
+    - '("abc" | try contains_multi(1) catch .), ([] | try contains_multi("x") catch .)'
+  input: 'null'
+  expected: |
+    "cannot check contains_multi(1): string (\"abc\")"
+    "cannot check contains_multi(\"x\"): array ([])"
+
 - name: indices function for array
   args:
     - 'indices(1), indices([]), indices([1,2]), indices([3,4,5])'
