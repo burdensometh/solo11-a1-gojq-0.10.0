@@ -71,6 +71,7 @@ func init() {
 		"_index":         argFunc2(funcIndex),
 		"_slice":         argFunc3(funcSlice),
 		"_break":         argFunc0(funcBreak),
+		"_sort_by":       argFunc1(funcSortBy),
 		"_plus":          argFunc0(funcOpPlus),
 		"_negate":        argFunc0(funcOpNegate),
 		"_add":           argFunc2(funcOpAdd),
@@ -822,6 +823,36 @@ func toIndex(a []interface{}, i int) int {
 
 func funcBreak(x interface{}) interface{} {
 	return &breakError{x.(string)}
+}
+
+type sortItem struct {
+	value, key interface{}
+}
+
+func funcSortBy(v, x interface{}) interface{} {
+	vs, ok := v.([]interface{})
+	if !ok {
+		return &expectedArrayError{v}
+	}
+	xs, ok := x.([]interface{})
+	if !ok {
+		return &expectedArrayError{x}
+	}
+	if len(vs) != len(xs) {
+		panic("length mismatch in sort_by")
+	}
+	items := make([]sortItem, len(vs))
+	for i, v := range vs {
+		items[i] = sortItem{v, xs[i]}
+	}
+	sort.SliceStable(items, func(i, j int) bool {
+		return compare(items[i].key, items[j].key) < 0
+	})
+	ws := make([]interface{}, len(vs))
+	for i, item := range items {
+		ws[i] = item.value
+	}
+	return ws
 }
 
 func funcSignificand(v float64) float64 {
