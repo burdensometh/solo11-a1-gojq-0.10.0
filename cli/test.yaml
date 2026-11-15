@@ -935,6 +935,26 @@
     ["apple","banana","cat","dog","hello","world"]
     ["cat","hello","banana"]
 
+- name: sort, group_by, unique functions with mixed integers and floats
+  args:
+    - -c
+    - 'sort, group_by(.), unique'
+  input: '[9007199254740993, 9007199254740992.0, 1e2, 100, -0.0, 0, 9007199254740994]'
+  expected: |
+    [-0,0,100,100,9007199254740992,9007199254740993,9007199254740994]
+    [[-0,0],[100,100],[9007199254740992],[9007199254740993],[9007199254740994]]
+    [-0,100,9007199254740992,9007199254740993,9007199254740994]
+
+- name: sort, group_by, unique functions with non-finite numbers
+  args:
+    - -c
+    - '([nan, infinite, -infinite, 0, 1, nan, infinite] | sort), ([nan, infinite, -infinite, 0, 1, nan, infinite] | unique), ([nan, 2, 1, nan, 2.0, 1.0] | group_by(.))'
+  input: 'null'
+  expected: |
+    [-1.7976931348623157e+308,0,1,1.7976931348623157e+308,1.7976931348623157e+308,null,null]
+    [-1.7976931348623157e+308,0,1,1.7976931348623157e+308,null]
+    [[1,1],[2,2],[null,null]]
+
 - name: arrays, objects, iterables, booleans, numbers, strings, nulls, values, scalars functions
   args:
     - -c
@@ -1821,6 +1841,30 @@
     "111111101111111101111111001111110001111100001111000001110000001100000001100000001100000011100000111100001111100011111100"
     "111111101111111110000000010000000010000000010000000010000000010000000010000000010111111110111111110111111110111111110111"
     "111110111111110111111110"
+
+- name: comparison operators with mixed integers and floats
+  args:
+    - -c
+    - '[9007199254740993 > 9007199254740992.0, 9007199254740993 == 9007199254740992.0, 9007199254740992.0 < 9007199254740993, 9007199254740993 == 9007199254740993.0, 9007199254740992 == 9007199254740992.0, 1 == 1.0, 0 == -0.0, 0.5 > 0, -0.5 < 0, 123456789012345678901234567890 > 1.2345678901234568e29, 123456789012345678901234567890 == 1.2345678901234568e29, 123456789012345678901234567890.0 == 1.2345678901234568e29]'
+  input: 'null'
+  expected: |
+    [true,false,true,false,true,true,true,true,true,true,false,true]
+
+- name: comparison operators with nested mixed integers and floats
+  args:
+    - -c
+    - '[[[9007199254740993], {"a": 9007199254740993}] == [[9007199254740992.0], {"a": 9007199254740992.0}], [[9007199254740993]] > [[9007199254740992.0]], {"a": 9007199254740993} != {"a": 9007199254740992.0}, ([{"a": [9007199254740993]}, {"a": [9007199254740992.0]}] | sort)]'
+  input: 'null'
+  expected: |
+    [false,true,true,[{"a":[9007199254740992]},{"a":[9007199254740993]}]]
+
+- name: comparison operators with non-finite numbers
+  args:
+    - -c
+    - '[nan == nan, nan != nan, nan > infinite, nan >= nan, nan <= nan, nan < 0, -infinite < infinite, infinite > 1e308, -infinite < -1e308, infinite == infinite, -infinite == -infinite]'
+  input: 'null'
+  expected: |
+    [true,false,true,true,true,false,true,true,true,true,true]
 
 - name: comparison operators does not associate
   args:
