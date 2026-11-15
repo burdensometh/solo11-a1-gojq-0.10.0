@@ -42,6 +42,46 @@ gojq: invalid json: <stdin>
               ^  invalid character 'b' looking for beginning of object key string
 ```
 
+## As-of join
+`asof_join` is a point-in-time association of events with the version of a
+dimension which was effective at the time of the event. It is useful when a
+dimension changes at 10:00 but an event which happened at 9:00 arrives late:
+the event is still associated with the old version.
+
+```sh
+ $ echo '[{"device":"d1","ts":9,"event":"boot"}]' \
+   | gojq -c 'asof_join([
+       {"device":"d1","effective":0,"id":"v1","mode":"old"},
+       {"device":"d1","effective":10,"id":"v2","mode":"new"}
+     ]; {"key":"device","event_time":"ts","version_time":"effective"})'
+[{"event":{"device":"d1","event":"boot","ts":9},"version":{"device":"d1","effective":0,"id":"v1","mode":"old"},"version_id":"v1","version_index":0}]
+```
+
+The input is the array of events and the argument is the array of version
+changes, both sorted by the composite key and then by time. Every event selects
+the version whose time is not later than the event time, and the result carries
+the version identity (`version_id`), the full version (`version`), and the
+position of the version in the versions array (`version_index`). Events without
+any version at or before their time are kept with `null` versions.
+
+- The default field names are `key`, `time`, and `id`. A composite key is an
+  array in the `key` field, or a list of field names in the `key` option.
+- Version changes at the same key and time conflict. The change with the
+  highest `priority` field wins, and a tie is resolved by the later record in
+  the versions array. Version changes at exactly the event time are visible to
+  the event.
+- The events and the versions must be sorted by the composite key and then by
+  time. Violating this precondition raises an error instead of silently
+  associating wrong versions. The join is a single forward merge, so the
+  version history is never rescanned for each event.
+- `asof_join_stream` accepts a single interleaved array of events and version
+  changes tagged by a `kind` field (`"event"` or `"version"`), sorted by key
+  and time.
+
+The optional options object supports `key`, `event_key`, `version_key`, `time`,
+`event_time`, `version_time`, `id`, `priority`, `default_priority`, `kind`,
+`event`, and `version`.
+
 ## Installation
 ### Homebrew
 ```sh

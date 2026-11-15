@@ -295,3 +295,11 @@ def JOIN($idx; stream; idx_expr; join_expr):
   stream | [., $idx[idx_expr]] | join_expr;
 def IN(s): any(s == .; .);
 def IN(src; s): any(src == s; .);
+def asof_join($versions):
+  _asof_join($versions; null);
+def asof_join($versions; $options):
+  _asof_join($versions; $options);
+def asof_join_stream:
+  _asof_stream(null);
+def asof_join_stream($options):
+  _asof_stream($options);

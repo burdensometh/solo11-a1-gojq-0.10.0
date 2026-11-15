@@ -70,6 +70,8 @@ func init() {
 		"_tobase64d":     argFunc0(funcToBase64d),
 		"_index":         argFunc2(funcIndex),
 		"_slice":         argFunc3(funcSlice),
+		"_asof_join":     {argcount2, funcAsofJoin},
+		"_asof_stream":   {argcount1, funcAsofJoinStream},
 		"_break":         argFunc0(funcBreak),
 		"_plus":          argFunc0(funcOpPlus),
 		"_negate":        argFunc0(funcOpNegate),

@@ -4002,6 +4002,191 @@
   expected: |
     [false,true,false,false,true,false,false,false]
 
+- name: asof_join function
+  args:
+    - -c
+    - 'asof_join([{"key":"d1","time":0,"id":"v1","mode":"old"},{"key":"d1","time":10,"id":"v2","mode":"new"}])'
+  input: '[{"key":"d1","time":5,"id":"e1"},{"key":"d1","time":9,"id":"e2"},{"key":"d1","time":10,"id":"e3"},{"key":"d1","time":15,"id":"e4"}]'
+  expected: |
+    [{"event":{"id":"e1","key":"d1","time":5},"version":{"id":"v1","key":"d1","mode":"old","time":0},"version_id":"v1","version_index":0},{"event":{"id":"e2","key":"d1","time":9},"version":{"id":"v1","key":"d1","mode":"old","time":0},"version_id":"v1","version_index":0},{"event":{"id":"e3","key":"d1","time":10},"version":{"id":"v2","key":"d1","mode":"new","time":10},"version_id":"v2","version_index":1},{"event":{"id":"e4","key":"d1","time":15},"version":{"id":"v2","key":"d1","mode":"new","time":10},"version_id":"v2","version_index":1}]
+
+- name: asof_join function with composite keys
+  args:
+    - -c
+    - 'asof_join([{"key":["dev",1],"time":0,"id":"a1"},{"key":["dev",1],"time":5,"id":"a2"},{"key":["dev",2],"time":3,"id":"b1"}]) | map(.version_id)'
+  input: '[{"key":["dev",1],"time":4,"id":"e1"},{"key":["dev",1],"time":5,"id":"e2"},{"key":["dev",2],"time":1,"id":"e3"},{"key":["dev",2],"time":3,"id":"e4"},{"key":["dev",3],"time":0,"id":"e5"}]'
+  expected: |
+    ["a1","a2",null,"b1",null]
+
+- name: asof_join function keeps events without history
+  args:
+    - -c
+    - 'asof_join([{"key":"d2","time":4,"id":"v"}])'
+  input: '[{"key":"d1","time":7,"id":"e1"},{"key":"d2","time":1,"id":"e2"},{"key":"d2","time":4,"id":"e3"}]'
+  expected: |
+    [{"event":{"id":"e1","key":"d1","time":7},"version":null,"version_id":null,"version_index":null},{"event":{"id":"e2","key":"d2","time":1},"version":null,"version_id":null,"version_index":null},{"event":{"id":"e3","key":"d2","time":4},"version":{"id":"v","key":"d2","time":4},"version_id":"v","version_index":0}]
+
+- name: asof_join function resolves same-instant conflicts by priority
+  args:
+    - -c
+    - 'asof_join([{"key":"d","time":0,"id":"v1","priority":1},{"key":"d","time":10,"id":"v2","priority":3},{"key":"d","time":10,"id":"v3","priority":7}]) | map([.version_id, .version_index])'
+  input: '[{"key":"d","time":5,"id":"e1"},{"key":"d","time":10,"id":"e2"},{"key":"d","time":11,"id":"e3"}]'
+  expected: |
+    [["v1",0],["v3",2],["v3",2]]
+
+- name: asof_join function resolves same-instant priority ties by input order
+  args:
+    - -c
+    - 'asof_join([{"key":"d","time":0,"id":"v1","priority":5},{"key":"d","time":0,"id":"v2","priority":5}]) | map(.version_id)'
+  input: '[{"key":"d","time":0,"id":"e"}]'
+  expected: |
+    ["v2"]
+
+- name: asof_join function with options
+  args:
+    - -c
+    - 'asof_join([{"device":"d1","effective":0,"rev":"r1","status":"old"},{"device":"d1","effective":10,"rev":"r2","status":"new"}] ; {"key":"device","event_time":"ts","version_time":"effective","id":"rev"})'
+  input: '[{"device":"d1","ts":9,"event":"boot"},{"device":"d1","ts":10,"event":"change"}]'
+  expected: |
+    [{"event":{"device":"d1","event":"boot","ts":9},"version":{"device":"d1","effective":0,"rev":"r1","status":"old"},"version_id":"r1","version_index":0},{"event":{"device":"d1","event":"change","ts":10},"version":{"device":"d1","effective":10,"rev":"r2","status":"new"},"version_id":"r2","version_index":1}]
+
+- name: asof_join function with custom priority option
+  args:
+    - -c
+    - 'asof_join([{"key":"d","time":0,"id":"v1","p":1},{"key":"d","time":0,"id":"v2","p":9}] ; {"priority":"p"}) | map(.version_id)'
+  input: '[{"key":"d","time":0,"id":"e"}]'
+  expected: |
+    ["v2"]
+
+- name: asof_join function with composite key fields
+  args:
+    - -c
+    - 'asof_join([{"device":"d1","zone":"z1","time":0,"id":"a0"},{"device":"d1","zone":"z2","time":5,"id":"b5"}] ; {"key":["device","zone"]}) | map(.version_id)'
+  input: '[{"device":"d1","zone":"z1","time":4,"id":"e1"},{"device":"d1","zone":"z2","time":4,"id":"e2"},{"device":"d1","zone":"z2","time":5,"id":"e3"}]'
+  expected: |
+    ["a0",null,"b5"]
+
+- name: asof_join function with default priority option
+  args:
+    - -c
+    - 'asof_join([{"key":"d","time":0,"id":"none"},{"key":"d","time":0,"id":"hi","priority":5}] ; {"default_priority":9}) | map(.version_id)'
+  input: '[{"key":"d","time":0,"id":"e"}]'
+  expected: |
+    ["none"]
+
+- name: asof_join function with empty inputs
+  args:
+    - -c
+    - 'asof_join([])'
+  input: '[]'
+  expected: |
+    []
+
+- name: asof_join_stream function
+  args:
+    - -c
+    - 'asof_join_stream | map([.event.id, .version_id])'
+  input: '[{"kind":"version","key":"a","time":0,"id":"a0"},{"kind":"event","key":"a","time":4,"id":"e1"},{"kind":"version","key":"a","time":5,"id":"a5"},{"kind":"event","key":"a","time":5,"id":"e2"},{"kind":"version","key":"b","time":3,"id":"b3"},{"kind":"event","key":"b","time":3,"id":"e3"}]'
+  expected: |
+    [["e1","a0"],["e2","a5"],["e3","b3"]]
+
+- name: asof_join_stream function resolves same-instant conflicts
+  args:
+    - -c
+    - 'asof_join_stream | map(.version_id)'
+  input: '[{"kind":"version","key":"d","time":10,"id":"lo","priority":1},{"kind":"event","key":"d","time":10,"id":"e1"},{"kind":"version","key":"d","time":10,"id":"hi","priority":9},{"kind":"event","key":"d","time":11,"id":"e2"}]'
+  expected: |
+    ["hi","hi"]
+
+- name: asof_join_stream function with custom kind names
+  args:
+    - -c
+    - 'asof_join_stream({"kind":"t","event":"E","version":"V"}) | map(.version_id)'
+  input: '[{"t":"V","key":"d","time":0,"id":"v1"},{"t":"E","key":"d","time":9,"id":"e1"}]'
+  expected: |
+    ["v1"]
+
+- name: asof_join_stream function rejects unsorted records
+  args:
+    - -c
+    - 'asof_join_stream'
+  input: '[{"kind":"event","key":"d","time":10,"id":"e1"},{"kind":"event","key":"d","time":9,"id":"e2"}]'
+  error: |
+    asof_join_stream: records are not sorted by key and time: records[1] (key "d", time 9) sorts before records[0] (key "d", time 10)
+  exit_code: 5
+
+- name: asof_join_stream function rejects unknown kind
+  args:
+    - -c
+    - 'asof_join_stream'
+  input: '[{"kind":"other","key":"d","time":9,"id":"e1"}]'
+  error: |
+    asof_join_stream: records[0].kind is not "event" or "version": string ("other")
+  exit_code: 5
+
+- name: asof_join function rejects events not sorted by key and time
+  args:
+    - -c
+    - 'asof_join([{"key":"d","time":0,"id":"v"}])'
+  input: '[{"key":"d","time":10,"id":"e1"},{"key":"d","time":5,"id":"e2"}]'
+  error: |
+    asof_join: events are not sorted by key and time: events[1] (key "d", time 5) sorts before events[0] (key "d", time 10)
+  exit_code: 5
+
+- name: asof_join function rejects events not sorted by key
+  args:
+    - -c
+    - 'asof_join([])'
+  input: '[{"key":"d2","time":0,"id":"e1"},{"key":"d1","time":0,"id":"e2"}]'
+  error: |
+    asof_join: events are not sorted by key and time: events[1] (key "d1", time 0) sorts before events[0] (key "d2", time 0)
+  exit_code: 5
+
+- name: asof_join function rejects versions not sorted by key and time
+  args:
+    - -c
+    - 'asof_join([{"key":"d","time":10,"id":"v1"},{"key":"d","time":0,"id":"v2"}])'
+  input: '[]'
+  error: |
+    asof_join: versions are not sorted by key and time: versions[1] (key "d", time 0) sorts before versions[0] (key "d", time 10)
+  exit_code: 5
+
+- name: asof_join function rejects non-numeric time
+  args:
+    - -c
+    - 'asof_join([{"key":"d","time":[1],"id":"v"}])'
+  input: '[]'
+  error: |
+    asof_join: versions[0] time is not a number or a string: array ([1])
+  exit_code: 5
+
+- name: asof_join function rejects non-object record
+  args:
+    - -c
+    - 'asof_join([1,2])'
+  input: '[]'
+  error: |
+    asof_join: versions[0] is not an object: number (1)
+  exit_code: 5
+
+- name: asof_join function rejects non-array input
+  args:
+    - -c
+    - 'asof_join([])'
+  input: '{}'
+  error: |
+    asof_join: events must be an array: object ({})
+  exit_code: 5
+
+- name: asof_join function rejects unknown option
+  args:
+    - -c
+    - 'asof_join([]; {"unknown": 1})'
+  input: '[]'
+  error: |
+    asof_join: unknown option "unknown"
+  exit_code: 5
+
 - name: format function
   args:
     - -n

@@ -256,6 +256,23 @@ func (err *getpathError) Error() string {
 	return fmt.Sprintf("cannot getpath with %s against: %s", previewValue(err.path), typeErrorPreview(err.v))
 }
 
+type asofJoinOrderError struct {
+	fn                           string
+	name                         string
+	index                        int
+	key, time, prevKey, prevTime interface{}
+}
+
+func (err *asofJoinOrderError) Error() string {
+	return fmt.Sprintf(
+		"%s: %s are not sorted by key and time: %s[%d] (key %s, time %s) sorts before %s[%d] (key %s, time %s)",
+		err.fn, err.name, err.name, err.index,
+		previewValue(err.key), previewValue(err.time),
+		err.name, err.index-1,
+		previewValue(err.prevKey), previewValue(err.prevTime),
+	)
+}
+
 func typeErrorPreview(v interface{}) string {
 	p := preview(v)
 	if p != "" {
